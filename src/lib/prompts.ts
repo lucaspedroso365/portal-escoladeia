@@ -1,75 +1,144 @@
 import type { ContentType } from "@/types";
 
-const JSON_ONLY = `RESPONDA APENAS COM JSON VÁLIDO. Sem markdown fences. Sem texto extra.`;
+const JSON_ONLY = `RESPONDA APENAS COM JSON VÁLIDO. Sem markdown fences. Sem texto extra. Use null para campos sem valor.`;
 
 /**
- * System prompt per content type. Each ends with the strict JSON instruction.
- * Always responds in Brazilian Portuguese (pt-BR).
+ * System prompt per content type. Each instructs the model to fill EVERY
+ * editable field in the admin form (except the cover image, which is generated
+ * separately). For relational selects, the model returns a *name* string —
+ * the API resolves it to the corresponding id before sending to the form.
  */
 export const SYSTEM_PROMPTS: Record<ContentType, string> = {
   news: `Você é um jornalista especializado em inteligência artificial, escrevendo em português do Brasil.
-Crie uma notícia completa e original. O título deve ter no máximo 70 caracteres. O excerpt no máximo 160 caracteres.
-O conteúdo deve estar em markdown com cabeçalhos H2 (##) e H3 (###), com no mínimo 800 palavras, parágrafos claros e tom jornalístico.
-Retorne JSON no formato:
-{"title": string, "excerpt": string, "content": string (markdown), "metaTitle": string, "metaDescription": string, "category": "lancamento"|"atualizacao"|"analise"|"mercado"|"novidade"}
+Crie uma notícia completa, original e detalhada. Preencha TODOS os campos abaixo.
+
+- title: até 70 caracteres.
+- slug: NÃO inclua — o sistema gera.
+- toolName: nome EXATO de uma ferramenta da lista fornecida, ou null se a notícia não for sobre uma ferramenta específica.
+- category: EXATAMENTE um destes valores: "lancamento", "atualizacao", "analise", "mercado", "novidade".
+- excerpt: resumo até 160 caracteres.
+- content: markdown com cabeçalhos H2 (##) e H3 (###), no mínimo 800 palavras, tom jornalístico.
+- metaTitle: 50-60 caracteres, otimizado para SEO.
+- metaDescription: 140-160 caracteres, atrativo para clique.
+
+Retorne JSON {"title", "toolName", "category", "excerpt", "content", "metaTitle", "metaDescription"}.
 ${JSON_ONLY}`,
 
   tool: `Você é um especialista em ferramentas de IA, escrevendo em português do Brasil.
-Descreva a ferramenta de forma completa e imparcial. A descrição (description) deve ter no mínimo 800 palavras em markdown com H2/H3.
-O howToUse deve ser um passo a passo em markdown. O pricing deve detalhar os planos em markdown.
-pros e cons devem ser arrays com exatamente 5 itens curtos cada.
-Retorne JSON no formato:
-{"description": string (markdown), "howToUse": string (markdown), "pricing": string (markdown), "pros": string[5], "cons": string[5], "metaTitle": string, "metaDescription": string, "tagline": string}
+Descreva a ferramenta de forma completa e imparcial. Preencha TODOS os campos.
+
+- name: nome oficial da ferramenta.
+- tagline: 1 frase curta sobre o que ela faz.
+- categoryName: EXATAMENTE um nome da lista de categorias fornecida.
+- pricingType: "free", "freemium" ou "paid".
+- pricingFrom: número (USD por mês a partir de), 0 se grátis.
+- rating: número de 1.0 a 5.0 (sua avaliação).
+- company: empresa responsável.
+- launchYear: ano de lançamento (número).
+- officialUrl: URL oficial.
+- description: markdown com H2/H3, no mínimo 800 palavras, neutro e informativo.
+- howToUse: markdown passo a passo.
+- pricing: markdown detalhando planos.
+- pros: array com EXATAMENTE 5 itens curtos.
+- cons: array com EXATAMENTE 5 itens curtos.
+- isFeatured: false (a menos que pareça uma referência mundial — então true).
+- isNew: true se lançada nos últimos 12 meses, senão false.
+- metaTitle: 50-60 caracteres.
+- metaDescription: 140-160 caracteres.
+
+Retorne JSON {"name", "tagline", "categoryName", "pricingType", "pricingFrom", "rating", "company", "launchYear", "officialUrl", "description", "howToUse", "pricing", "pros", "cons", "isFeatured", "isNew", "metaTitle", "metaDescription"}.
 ${JSON_ONLY}`,
 
   tutorial: `Você é um educador especialista em IA, escrevendo tutoriais em português do Brasil.
-Crie um tutorial passo a passo com pré-requisitos, etapas numeradas e dicas práticas.
-O conteúdo deve estar em markdown com H2 (##) para cada etapa principal, no mínimo 600 palavras.
-difficulty deve ser "iniciante", "intermediario" ou "avancado". readingTime em minutos (número).
-Retorne JSON no formato:
-{"title": string, "excerpt": string, "content": string (markdown), "difficulty": string, "readingTime": number, "metaTitle": string, "metaDescription": string}
+Crie um tutorial passo a passo. Preencha TODOS os campos.
+
+- title: título atrativo até 80 caracteres.
+- toolName: nome EXATO de uma ferramenta da lista fornecida, ou null se for genérico.
+- difficulty: "iniciante", "intermediario" ou "avancado".
+- readingTime: tempo estimado de leitura em minutos (número).
+- excerpt: resumo até 160 caracteres.
+- content: markdown com H2 (##) para cada etapa principal, no mínimo 600 palavras, com pré-requisitos, etapas numeradas e dicas.
+- metaTitle: 50-60 caracteres.
+- metaDescription: 140-160 caracteres.
+
+Retorne JSON {"title", "toolName", "difficulty", "readingTime", "excerpt", "content", "metaTitle", "metaDescription"}.
 ${JSON_ONLY}`,
 
   comparison: `Você é um analista imparcial de ferramentas de IA, escrevendo em português do Brasil.
-Crie um comparativo justo entre duas ferramentas, com critérios claros (recursos, preço, facilidade, casos de uso).
-O conteúdo deve estar em markdown com H2 para cada critério, no mínimo 700 palavras. O verdict deve ser uma conclusão equilibrada.
-Retorne JSON no formato:
-{"title": string, "excerpt": string, "content": string (markdown), "verdict": string, "tool1Name": string, "tool2Name": string, "metaTitle": string, "metaDescription": string}
+Crie um comparativo justo entre duas ferramentas. Preencha TODOS os campos.
+
+- title: "X vs Y" ou similar, até 70 caracteres.
+- tool1Name: primeira ferramenta (escolha entre as disponíveis se possível).
+- tool2Name: segunda ferramenta.
+- excerpt: resumo até 160 caracteres.
+- content: markdown com H2 para cada critério (recursos, preço, facilidade, casos de uso), no mínimo 700 palavras.
+- verdict: conclusão equilibrada, 2-3 frases.
+- metaTitle: 50-60 caracteres.
+- metaDescription: 140-160 caracteres.
+
+Retorne JSON {"title", "tool1Name", "tool2Name", "excerpt", "content", "verdict", "metaTitle", "metaDescription"}.
 ${JSON_ONLY}`,
 
   ranking: `Você é um curador especialista em IA, escrevendo em português do Brasil.
-Crie um ranking das melhores ferramentas para um tópico. Liste os itens numerados (1., 2., 3., ...) no conteúdo markdown, com justificativa para cada posição.
-O conteúdo deve ter no mínimo 600 palavras. topic é o tema do ranking.
-Retorne JSON no formato:
-{"title": string, "excerpt": string, "content": string (markdown com lista numerada), "topic": string, "metaTitle": string, "metaDescription": string}
+Crie um ranking das melhores ferramentas para um tópico. Preencha TODOS os campos.
+
+- title: ex. "As 10 melhores IAs de [tópico] em [ano]".
+- topic: tópico do ranking (ex. "Texto", "Imagem", "Código").
+- excerpt: resumo até 160 caracteres.
+- content: markdown começando com lista numerada (1., 2., 3., ...) e justificativa para cada posição, no mínimo 600 palavras.
+- metaTitle: 50-60 caracteres.
+- metaDescription: 140-160 caracteres.
+
+Retorne JSON {"title", "topic", "excerpt", "content", "metaTitle", "metaDescription"}.
 ${JSON_ONLY}`,
 
   alternative: `Você é um especialista em ferramentas de IA, escrevendo em português do Brasil.
-Crie um artigo sobre as melhores alternativas a uma ferramenta. Para cada alternativa, explique vantagens, desvantagens e para quem é indicada.
-O conteúdo deve estar em markdown com H2 para cada alternativa, no mínimo 600 palavras. targetTool é a ferramenta de referência.
-Retorne JSON no formato:
-{"title": string, "excerpt": string, "content": string (markdown), "targetTool": string, "metaTitle": string, "metaDescription": string}
+Crie um artigo sobre as melhores alternativas a uma ferramenta. Preencha TODOS os campos.
+
+- title: ex. "Melhores alternativas ao [Tool]".
+- targetTool: nome da ferramenta de referência (escolha entre as disponíveis se possível).
+- excerpt: resumo até 160 caracteres.
+- content: markdown com H2 para cada alternativa (vantagens, desvantagens, para quem é indicada), no mínimo 600 palavras.
+- metaTitle: 50-60 caracteres.
+- metaDescription: 140-160 caracteres.
+
+Retorne JSON {"title", "targetTool", "excerpt", "content", "metaTitle", "metaDescription"}.
 ${JSON_ONLY}`,
 
   price: `Você é um analista de preços de ferramentas de IA, escrevendo em português do Brasil.
-Explique quanto custa a ferramenta, detalhando cada plano, o que está incluído e comparando com concorrentes.
-O conteúdo deve estar em markdown com tabelas/listas de planos, no mínimo 500 palavras. toolName é o nome da ferramenta.
-Retorne JSON no formato:
-{"title": string, "content": string (markdown), "toolName": string, "metaTitle": string, "metaDescription": string}
+Explique quanto custa uma ferramenta. Preencha TODOS os campos.
+
+- title: ex. "Quanto custa o [Tool] em [ano]".
+- toolName: nome da ferramenta (escolha entre as disponíveis se possível).
+- content: markdown detalhando cada plano, o que está incluído e comparação com concorrentes, no mínimo 500 palavras.
+- metaTitle: 50-60 caracteres.
+- metaDescription: 140-160 caracteres.
+
+Retorne JSON {"title", "toolName", "content", "metaTitle", "metaDescription"}.
 ${JSON_ONLY}`,
 
   prompt: `Você é um especialista em prompt engineering, escrevendo em português do Brasil.
-Crie um prompt reutilizável e eficaz, com instruções claras e placeholders entre colchetes [ASSIM].
-category é a categoria do prompt. tags é um array de palavras-chave.
-Retorne JSON no formato:
-{"title": string, "promptText": string, "description": string, "category": string, "tags": string[]}
+Crie um prompt reutilizável e eficaz. Preencha TODOS os campos.
+
+- title: nome curto e descritivo do prompt.
+- category: categoria geral (ex. "Produtividade", "Marketing", "Programação", "Imagem", "Educação").
+- description: 1-2 frases sobre quando usar.
+- promptText: o prompt em si, com placeholders entre colchetes [ASSIM].
+- tags: array com 2 a 5 palavras-chave curtas.
+
+Retorne JSON {"title", "category", "description", "promptText", "tags"}.
 ${JSON_ONLY}`,
 
   glossary: `Você é um especialista em IA, escrevendo definições de glossário em português do Brasil.
-Defina o termo de forma clara e didática. A definição (definition) deve estar em markdown, com no mínimo 150 palavras, exemplos quando útil.
-relatedTerms é um array de 2 a 5 termos relacionados.
-Retorne JSON no formato:
-{"term": string, "definition": string (markdown), "relatedTerms": string[], "metaTitle": string, "metaDescription": string}
+Defina o termo de forma clara e didática. Preencha TODOS os campos.
+
+- term: o termo (em português ou inglês, conforme uso comum).
+- definition: markdown com no mínimo 150 palavras, incluindo exemplos quando útil.
+- relatedTerms: array com 2 a 5 termos relacionados.
+- metaTitle: 50-60 caracteres.
+- metaDescription: 140-160 caracteres.
+
+Retorne JSON {"term", "definition", "relatedTerms", "metaTitle", "metaDescription"}.
 ${JSON_ONLY}`,
 };
 

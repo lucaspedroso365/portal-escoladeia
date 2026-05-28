@@ -49,8 +49,22 @@ export function AdminForm({
     setValues((prev) => {
       const next = { ...prev };
       for (const f of schema.fields) {
-        if (f.name in data && data[f.name] != null) {
-          next[f.name] = f.type === "tags" ? toStringArray(data[f.name]) : data[f.name];
+        if (!(f.name in data) || data[f.name] == null) continue;
+        const v = data[f.name];
+        switch (f.type) {
+          case "tags":
+            next[f.name] = toStringArray(v);
+            break;
+          case "toggle":
+            next[f.name] = Boolean(v);
+            break;
+          case "number":
+          case "select":
+            // The form state stores these as strings.
+            next[f.name] = String(v);
+            break;
+          default:
+            next[f.name] = typeof v === "string" ? v : String(v);
         }
       }
       const src = next[schema.slugFrom];

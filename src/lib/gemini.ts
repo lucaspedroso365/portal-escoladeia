@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const MODEL_TEXT = "gemini-2.5-flash";
+export const MODEL_FALLBACK = "gemini-2.5-flash-lite";
 export const MODEL_IMAGE = "imagen-4.0-generate-001";
 
 /**
@@ -12,6 +13,51 @@ function getClient(): GoogleGenerativeAI {
   return new GoogleGenerativeAI(key);
 }
 
+interface GeminiError extends Error {
+  status?: number;
+  statusText?: string;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Run a content generation with retry on transient errors (503/429/5xx) and
+ * a graceful fallback to a lighter model if the primary stays overloaded.
+ */
+async function callWithRetry(
+  buildModel: (modelName: string) => ReturnType<GoogleGenerativeAI["getGenerativeModel"]>,
+  prompt: string
+): Promise<string> {
+  const attempts: { model: string; delayMs: number }[] = [
+    { model: MODEL_TEXT, delayMs: 0 },
+    { model: MODEL_TEXT, delayMs: 1500 },
+    { model: MODEL_TEXT, delayMs: 4000 },
+    { model: MODEL_FALLBACK, delayMs: 0 },
+    { model: MODEL_FALLBACK, delayMs: 3000 },
+  ];
+  let lastError: unknown;
+  for (let i = 0; i < attempts.length; i++) {
+    const { model: modelName, delayMs } = attempts[i];
+    if (delayMs) await sleep(delayMs);
+    try {
+      const model = buildModel(modelName);
+      const result = await model.generateContent(prompt);
+      if (i > 0) console.log(`[gemini] sucesso na tentativa ${i + 1} (${modelName})`);
+      return result.response.text();
+    } catch (e) {
+      lastError = e;
+      const err = e as GeminiError;
+      const status = err.status;
+      const transient = !status || status === 429 || (status >= 500 && status < 600);
+      console.warn(
+        `[gemini] tentativa ${i + 1}/${attempts.length} falhou (${modelName}, status=${status ?? "n/a"})`
+      );
+      if (!transient) throw e;
+    }
+  }
+  throw lastError;
+}
+
 /**
  * Plain text generation. When `useGrounding` is true, Google Search grounding
  * is enabled so the model can use real-time data.
@@ -21,13 +67,15 @@ export async function generateText(
   useGrounding = false
 ): Promise<string> {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({
-    model: MODEL_TEXT,
-    // googleSearch grounding tool — typed loosely for SDK 0.24.x.
-    ...(useGrounding ? ({ tools: [{ googleSearch: {} }] } as never) : {}),
-  });
-  const result = await model.generateContent(prompt);
-  return result.response.text();
+  return callWithRetry(
+    (modelName) =>
+      genAI.getGenerativeModel({
+        model: modelName,
+        // googleSearch grounding tool — typed loosely for SDK 0.24.x.
+        ...(useGrounding ? ({ tools: [{ googleSearch: {} }] } as never) : {}),
+      }),
+    prompt
+  );
 }
 
 /**
@@ -40,15 +88,16 @@ export async function generateJSON<T = unknown>(
   useGrounding = false
 ): Promise<T> {
   const genAI = getClient();
-  const config: Record<string, unknown> = { model: MODEL_TEXT };
-  if (useGrounding) {
-    config.tools = [{ googleSearch: {} }];
-  } else {
-    config.generationConfig = { responseMimeType: "application/json" };
-  }
-  const model = genAI.getGenerativeModel(config as never);
-  const result = await model.generateContent(prompt);
-  return parseJSONLoose<T>(result.response.text());
+  const text = await callWithRetry((modelName) => {
+    const config: Record<string, unknown> = { model: modelName };
+    if (useGrounding) {
+      config.tools = [{ googleSearch: {} }];
+    } else {
+      config.generationConfig = { responseMimeType: "application/json" };
+    }
+    return genAI.getGenerativeModel(config as never);
+  }, prompt);
+  return parseJSONLoose<T>(text);
 }
 
 /**
