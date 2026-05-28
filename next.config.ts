@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "**" },
       { protocol: "http", hostname: "localhost" },
     ],
+    localPatterns: [{ pathname: "/uploads/**", search: "" }],
   },
   async headers() {
     return [
