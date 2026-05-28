@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id          Int      @id @default(autoincrement())
+  name        String
+  slug        String   @unique
+  description String?  @db.Text
+  icon        String?
+  order       Int      @default(0)
+  tools       Tool[]
+  createdAt   DateTime @default(now())
+
+  @@index([slug])
+}
+
+model Tool {
+  id              Int        @id @default(autoincrement())
+  name            String
+  slug            String     @unique
+  tagline         String?    @db.Text
+  description     String     @db.LongText
+  howToUse        String?    @db.LongText
+  pricing         String?    @db.LongText
+  pros            Json?
+  cons            Json?
+  officialUrl     String?
+  affiliateUrl    String?
+  logoUrl         String?
+  coverImageUrl   String?
+  pricingType     String     @default("freemium")
+  pricingFrom     Float?
+  rating          Float?
+  monthlyVisits   String?
+  launchYear      Int?
+  company         String?
+  headquarters    String?
+  isFeatured      Boolean    @default(false)
+  isNew           Boolean    @default(false)
+  metaTitle       String?
+  metaDescription String?    @db.Text
+  categoryId      Int
+  category        Category   @relation(fields: [categoryId], references: [id])
+  news            News[]
+  tutorials       Tutorial[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([slug])
+  @@index([categoryId])
+  @@index([isFeatured])
+}
+
+model News {
+  id              Int       @id @default(autoincrement())
+  title           String    @db.Text
+  slug            String    @unique
+  excerpt         String?   @db.Text
+  content         String    @db.LongText
+  coverImageUrl   String?
+  category        String    @default("novidade")
+  metaTitle       String?
+  metaDescription String?   @db.Text
+  published       Boolean   @default(false)
+  publishedAt     DateTime?
+  views           Int       @default(0)
+  toolId          Int?
+  tool            Tool?     @relation(fields: [toolId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([slug])
+  @@index([published])
+  @@index([publishedAt])
+}
+
+model Tutorial {
+  id              Int       @id @default(autoincrement())
+  title           String
+  slug            String    @unique
+  excerpt         String?   @db.Text
+  content         String    @db.LongText
+  coverImageUrl   String?
+  difficulty      String    @default("iniciante")
+  readingTime     Int?
+  metaTitle       String?
+  metaDescription String?   @db.Text
+  published       Boolean   @default(false)
+  publishedAt     DateTime?
+  toolId          Int?
+  tool            Tool?     @relation(fields: [toolId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([slug])
+  @@index([published])
+}
+
+model Comparison {
+  id              Int       @id @default(autoincrement())
+  title           String
+  slug            String    @unique
+  excerpt         String?   @db.Text
+  content         String    @db.LongText
+  coverImageUrl   String?
+  verdict         String?   @db.Text
+  tool1Name       String
+  tool2Name       String
+  metaTitle       String?
+  metaDescription String?   @db.Text
+  published       Boolean   @default(false)
+  publishedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([slug])
+}
+
+model Ranking {
+  id              Int       @id @default(autoincrement())
+  title           String
+  slug            String    @unique
+  excerpt         String?   @db.Text
+  content         String    @db.LongText
+  coverImageUrl   String?
+  topic           String
+  metaTitle       String?
+  metaDescription String?   @db.Text
+  published       Boolean   @default(false)
+  publishedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([slug])
+}
+
+model Alternative {
+  id              Int       @id @default(autoincrement())
+  title           String
+  slug            String    @unique
+  excerpt         String?   @db.Text
+  content         String    @db.LongText
+  coverImageUrl   String?
+  targetTool      String
+  metaTitle       String?
+  metaDescription String?   @db.Text
+  published       Boolean   @default(false)
+  publishedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([slug])
+}
+
+model Price {
+  id              Int       @id @default(autoincrement())
+  title           String
+  slug            String    @unique
+  content         String    @db.LongText
+  toolName        String
+  metaTitle       String?
+  metaDescription String?   @db.Text
+  published       Boolean   @default(false)
+  publishedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([slug])
+}
+
+model Prompt {
+  id              Int      @id @default(autoincrement())
+  title           String
+  slug            String   @unique
+  promptText      String   @db.LongText
+  description     String?  @db.Text
+  category        String
+  tags            Json?
+  metaTitle       String?
+  metaDescription String?  @db.Text
+  published       Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@index([slug])
+  @@index([category])
+}
+
+model GlossaryTerm {
+  id              Int      @id @default(autoincrement())
+  term            String   @unique
+  slug            String   @unique
+  definition      String   @db.LongText
+  relatedTerms    Json?
+  metaTitle       String?
+  metaDescription String?  @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([slug])
+}
+
+model Newsletter {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
