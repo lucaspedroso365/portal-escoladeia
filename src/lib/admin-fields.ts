@@ -182,6 +182,7 @@ export const ADMIN_FIELDS: Record<ContentType, TypeSchema> = {
     fields: [
       { name: "title", label: "Título", type: "text" },
       { name: "slug", label: "Slug", type: "text" },
+      { name: "toolId", label: "Ferramenta (opcional)", type: "select", optionsSource: "tools", numericId: true },
       { name: "category", label: "Categoria", type: "text" },
       { name: "description", label: "Descrição", type: "textarea" },
       { name: "promptText", label: "Texto do prompt", type: "markdown" },

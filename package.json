@@ -13,7 +13,12 @@
     "create-admin": "tsx scripts/create-admin.ts",
     "seed:tools": "tsx scripts/seed-tools-complete.ts",
     "generate:tools": "tsx scripts/generate-tools-content.ts",
+    "generate:tutorials": "tsx scripts/generate-tutorials.ts",
     "generate:news": "tsx scripts/generate-news.ts",
+    "generate:prompts": "tsx scripts/generate-prompts.ts",
+    "generate:comparisons": "tsx scripts/generate-comparisons.ts",
+    "generate:rankings": "tsx scripts/generate-rankings.ts",
+    "generate:all": "npm run generate:tutorials && npm run generate:news && npm run generate:prompts && npm run generate:comparisons && npm run generate:rankings",
     "postinstall": "prisma generate"
   },
   "dependencies": {

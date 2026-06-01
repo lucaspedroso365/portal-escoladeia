@@ -13,25 +13,24 @@ import {
 const prisma = new PrismaClient();
 
 const TOPICS: ((tool: string) => string)[] = [
-  (t) => `principais novidades e atualizações recentes de ${t}`,
-  (t) => `como ${t} está mudando o mercado de trabalho`,
-  (t) => `comparação de ${t} com concorrentes em 2025`,
-  (t) => `casos de uso reais e histórias de sucesso com ${t}`,
-  (t) => `futuro e próximas funcionalidades esperadas de ${t}`,
+  (t) => `como usar ${t} do zero para iniciantes`,
+  (t) => `dicas avançadas e truques para ${t}`,
+  (t) => `como usar ${t} para trabalho e produtividade`,
+  (t) => `integrando ${t} com outras ferramentas`,
+  (t) => `erros comuns ao usar ${t} e como resolver`,
 ];
 
-const VALID_CATEGORIES = ["lancamento", "atualizacao", "analise", "novidade"];
-
 function prompt(toolName: string, topic: string): string {
-  return `Você é jornalista especializado em IA. Crie uma notícia em português brasileiro sobre ${toolName} com tema "${topic}".
-Use apenas informações reais que você conhece. Não invente datas, números ou anúncios específicos. Quando o tema for sobre futuro/expectativas, deixe claro que é especulação ou tendência.
+  return `Você é especialista em ${toolName}. Crie um tutorial completo em português brasileiro sobre ${toolName} com tema "${topic}".
+Use apenas informações reais que você conhece sobre a ferramenta. Não invente recursos ou números específicos.
 
 Retorne JSON: {
-  "title": string (até 70 chars, chamativo, com o nome da ferramenta),
+  "title": string (até 70 chars, com o nome da ferramenta),
   "slug": string,
   "excerpt": string (até 160 chars),
-  "content": string (markdown 600+ palavras com H2 e H3),
-  "category": "lancamento" | "atualizacao" | "analise" | "novidade",
+  "content": string (markdown 800+ palavras com H2 e H3),
+  "difficulty": "iniciante" | "intermediario" | "avancado",
+  "readingTime": number (minutos),
   "metaTitle": string (até 60 chars),
   "metaDescription": string (até 160 chars)
 }
@@ -43,17 +42,18 @@ interface Payload {
   slug?: string;
   excerpt?: string;
   content?: string;
-  category?: string;
+  difficulty?: string;
+  readingTime?: number;
   metaTitle?: string;
   metaDescription?: string;
 }
 
 async function main() {
   const allTools = await prisma.tool.findMany({
-    select: { id: true, name: true, slug: true, _count: { select: { news: true } } },
+    select: { id: true, name: true, slug: true, _count: { select: { tutorials: true } } },
     orderBy: { id: "asc" },
   });
-  const eligible = allTools.filter((t) => t._count.news < TOPICS.length);
+  const eligible = allTools.filter((t) => t._count.tutorials < TOPICS.length);
   const tools = LIMIT > 0 ? eligible.slice(0, LIMIT) : eligible;
 
   type Job = { tool: (typeof tools)[number]; topic: string; topicIdx: number };
@@ -66,9 +66,9 @@ async function main() {
   const total = jobs.length;
 
   console.log(
-    `${eligible.length}/${allTools.length} ferramentas precisam de notícias.`
+    `${eligible.length}/${allTools.length} ferramentas precisam de tutoriais.`
   );
-  banner("generate-news", total, MODEL_TEXT);
+  banner("generate-tutorials", total, MODEL_TEXT);
   if (total === 0) {
     await prisma.$disconnect();
     return;
@@ -78,25 +78,28 @@ async function main() {
   let fail = 0;
 
   await pool(jobs, async (job, idx) => {
-    const tag = `[${idx + 1}/${total}] ${job.tool.name} — Notícia ${job.topicIdx + 1}/5`;
+    const tag = `[${idx + 1}/${total}] ${job.tool.name} — Tutorial ${job.topicIdx + 1}/5`;
     try {
       const data = await generateJSON<Payload>(prompt(job.tool.name, job.topic), false);
       if (!data?.title || !data?.content) throw new Error("payload incompleto");
-      const category = VALID_CATEGORIES.includes(data.category ?? "")
-        ? (data.category as string)
-        : "novidade";
+      const difficulty = ["iniciante", "intermediario", "avancado"].includes(
+        data.difficulty ?? ""
+      )
+        ? (data.difficulty as string)
+        : "iniciante";
 
       const { slug } = await createWithUniqueSlug(
         data.slug || data.title,
         job.tool.slug,
         (slug) =>
-          prisma.news.create({
+          prisma.tutorial.create({
             data: {
-              title: truncate(data.title!, 240),
+              title: truncate(data.title!, 200),
               slug,
               excerpt: data.excerpt ? truncate(data.excerpt, 240) : null,
               content: data.content!,
-              category,
+              difficulty,
+              readingTime: typeof data.readingTime === "number" ? data.readingTime : 7,
               published: true,
               publishedAt: new Date(),
               toolId: job.tool.id,
@@ -107,7 +110,7 @@ async function main() {
             },
           })
       );
-      await revalidate("news", slug);
+      await revalidate("tutorial", slug);
       ok++;
       console.log(`${tag} — OK`);
     } catch (e) {
@@ -117,7 +120,7 @@ async function main() {
   });
 
   console.log(`\n✅ Concluído. OK: ${ok}  Erros: ${fail}`);
-  await revalidate("news");
+  await revalidate("tutorial"); // refresh list page once at the end
   await prisma.$disconnect();
 }
 

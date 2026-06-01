@@ -49,6 +49,7 @@ model Tool {
   category        Category   @relation(fields: [categoryId], references: [id])
   news            News[]
   tutorials       Tutorial[]
+  prompts         Prompt[]
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
@@ -185,10 +186,13 @@ model Prompt {
   metaTitle       String?
   metaDescription String?  @db.Text
   published       Boolean  @default(true)
+  toolId          Int?
+  tool            Tool?    @relation(fields: [toolId], references: [id])
   createdAt       DateTime @default(now())
 
   @@index([slug])
   @@index([category])
+  @@index([toolId])
 }
 
 model GlossaryTerm {
