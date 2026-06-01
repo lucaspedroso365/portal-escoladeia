@@ -3,8 +3,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 import { PrismaClient } from "@prisma/client";
-import { generateJSON } from "@/lib/gemini";
-import { getSystemPrompt } from "@/lib/prompts";
+import { generateJSON, MODEL_TEXT } from "@/lib/gemini";
 
 const prisma = new PrismaClient();
 
@@ -13,13 +12,38 @@ const DELAY_MS = Number(process.env.DELAY_MS ?? 1000);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function pool<T>(items: T[], worker: (item: T) => Promise<void>) {
-  let index = 0;
+function buildPrompt(name: string): string {
+  return `Você é especialista em ferramentas de IA. Sobre ${name}, gere em português brasileiro:
+- description: texto completo com 800+ palavras sobre a ferramenta, em markdown com cabeçalhos H2 (##) e H3 (###), tom informativo e neutro.
+- howToUse: passo a passo de como usar (markdown com H2/H3, etapas numeradas e dicas práticas).
+- pricing: detalhamento dos planos e preços atuais (markdown).
+- pros: array com EXATAMENTE 5 pontos positivos curtos.
+- cons: array com EXATAMENTE 5 pontos negativos curtos.
+- metaTitle: título SEO até 60 caracteres.
+- metaDescription: descrição SEO até 160 caracteres.
+
+Retorne JSON {"description", "howToUse", "pricing", "pros", "cons", "metaTitle", "metaDescription"}.
+
+RESPONDA APENAS COM JSON VÁLIDO. Sem markdown fences. Sem texto extra.`;
+}
+
+interface GeneratedTool {
+  description?: string;
+  howToUse?: string;
+  pricing?: string;
+  pros?: unknown;
+  cons?: unknown;
+  metaTitle?: string;
+  metaDescription?: string;
+}
+
+async function pool<T>(items: T[], worker: (item: T, idx: number) => Promise<void>) {
+  let i = 0;
   async function runner() {
-    while (index < items.length) {
-      const current = items[index++];
-      await worker(current);
-      await sleep(DELAY_MS);
+    while (i < items.length) {
+      const idx = i++;
+      await worker(items[idx], idx);
+      if (DELAY_MS) await sleep(DELAY_MS);
     }
   }
   await Promise.all(
@@ -28,54 +52,60 @@ async function pool<T>(items: T[], worker: (item: T) => Promise<void>) {
 }
 
 async function main() {
-  // Tools still missing generated content (no howToUse yet).
-  const tools = await prisma.tool.findMany({
-    where: { howToUse: null },
-    include: { category: true },
+  // Idempotente: só pega Tools sem description útil. O campo é NOT NULL no
+  // schema, então só pode estar vazio.
+  const pending = await prisma.tool.findMany({
+    where: { description: "" },
+    select: { id: true, name: true },
+    orderBy: { id: "asc" },
   });
-  console.log(`Gerando conteúdo para ${tools.length} ferramenta(s)...`);
 
-  await pool(tools, async (tool) => {
+  const total = pending.length;
+  console.log(`Gerando conteúdo para ${total} ferramenta(s) (${MODEL_TEXT}, concorrência ${CONCURRENCY}, delay ${DELAY_MS}ms)...`);
+  if (total === 0) {
+    console.log("Nada a fazer — todas as ferramentas já têm conteúdo.");
+    await prisma.$disconnect();
+    return;
+  }
+
+  let okCount = 0;
+  let failCount = 0;
+
+  await pool(pending, async (tool, idx) => {
+    const tag = `[${idx + 1}/${total}]`;
     try {
-      const prompt = `${getSystemPrompt("tool")}\n\nFerramenta: ${tool.name}\nCategoria: ${
-        tool.category?.name ?? ""
-      }\nSite oficial: ${tool.officialUrl ?? ""}`;
-      const data = await generateJSON<{
-        description?: string;
-        howToUse?: string;
-        pricing?: string;
-        pros?: string[];
-        cons?: string[];
-        tagline?: string;
-        metaTitle?: string;
-        metaDescription?: string;
-      }>(prompt, false);
-
+      const data = await generateJSON<GeneratedTool>(buildPrompt(tool.name), false);
+      if (!data?.description) throw new Error("resposta sem 'description'");
       await prisma.tool.update({
         where: { id: tool.id },
         data: {
-          description: data.description ?? tool.description,
+          description: data.description,
           howToUse: data.howToUse ?? null,
           pricing: data.pricing ?? null,
-          pros: data.pros ?? [],
-          cons: data.cons ?? [],
-          tagline: data.tagline ?? tool.tagline,
-          metaTitle: data.metaTitle ?? tool.metaTitle,
-          metaDescription: data.metaDescription ?? tool.metaDescription,
+          pros: Array.isArray(data.pros) ? data.pros : [],
+          cons: Array.isArray(data.cons) ? data.cons : [],
+          metaTitle: data.metaTitle ?? null,
+          metaDescription: data.metaDescription ?? null,
         },
       });
-      console.log(`✓ ${tool.name}`);
+      okCount++;
+      console.log(`${tag} ${tool.name} — OK`);
     } catch (e) {
-      console.error(`✗ ${tool.name}:`, (e as Error).message);
+      failCount++;
+      console.log(`${tag} ${tool.name} — ERRO: ${(e as Error).message}`);
     }
   });
 
-  await prisma.$disconnect();
-  console.log("✅ Concluído.");
+  console.log("");
+  console.log(`✅ Concluído. OK: ${okCount}  Erros: ${failCount}`);
 }
 
-main().catch(async (e) => {
-  console.error(e);
-  await prisma.$disconnect();
-  process.exit(1);
-});
+main()
+  .catch(async (e) => {
+    console.error(e);
+    await prisma.$disconnect();
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

@@ -11,6 +11,7 @@
     "db:generate": "prisma generate",
     "seed": "tsx prisma/seed.ts",
     "create-admin": "tsx scripts/create-admin.ts",
+    "seed:tools": "tsx scripts/seed-tools-complete.ts",
     "generate:tools": "tsx scripts/generate-tools-content.ts",
     "generate:news": "tsx scripts/generate-news.ts",
     "postinstall": "prisma generate"
