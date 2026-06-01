@@ -9,6 +9,7 @@ const prisma = new PrismaClient();
 
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 3);
 const DELAY_MS = Number(process.env.DELAY_MS ?? 1000);
+const LIMIT = Number(process.env.LIMIT ?? 0); // 0 = sem limite
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -54,11 +55,12 @@ async function pool<T>(items: T[], worker: (item: T, idx: number) => Promise<voi
 async function main() {
   // Idempotente: só pega Tools sem description útil. O campo é NOT NULL no
   // schema, então só pode estar vazio.
-  const pending = await prisma.tool.findMany({
+  const allPending = await prisma.tool.findMany({
     where: { description: "" },
     select: { id: true, name: true },
     orderBy: { id: "asc" },
   });
+  const pending = LIMIT > 0 ? allPending.slice(0, LIMIT) : allPending;
 
   const total = pending.length;
   console.log(`Gerando conteúdo para ${total} ferramenta(s) (${MODEL_TEXT}, concorrência ${CONCURRENCY}, delay ${DELAY_MS}ms)...`);
