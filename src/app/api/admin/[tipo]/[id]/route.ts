@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { adminTypeByKey } from "@/lib/admin";
 import { ADMIN_FIELDS } from "@/lib/admin-fields";
 import { coercePayload } from "@/lib/admin-data";
+import { revalidateForType } from "@/lib/revalidate";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -48,6 +49,7 @@ export async function PUT(
       where: { id: numId },
       data,
     });
+    revalidateForType(type.key, (updated as { slug?: string }).slug);
     return NextResponse.json(updated);
   } catch (e) {
     console.error(`[admin:update]`, e);
@@ -67,7 +69,12 @@ export async function DELETE(
   if (Number.isNaN(numId)) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
 
   try {
+    const before = await (prisma as any)[type.model].findUnique({
+      where: { id: numId },
+      select: { slug: true },
+    });
     await (prisma as any)[type.model].delete({ where: { id: numId } });
+    revalidateForType(type.key, before?.slug);
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error(`[admin:delete]`, e);

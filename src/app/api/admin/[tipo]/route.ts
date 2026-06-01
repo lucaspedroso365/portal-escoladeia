@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { adminTypeByKey } from "@/lib/admin";
 import { ADMIN_FIELDS } from "@/lib/admin-fields";
 import { coercePayload } from "@/lib/admin-data";
+import { revalidateForType } from "@/lib/revalidate";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -44,6 +45,7 @@ export async function POST(
 
   try {
     const created = await (prisma as any)[type.model].create({ data });
+    revalidateForType(type.key, (created as { slug?: string }).slug);
     return NextResponse.json(created, { status: 201 });
   } catch (e) {
     console.error(`[admin:${tipo}:create]`, e);

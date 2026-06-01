@@ -10,6 +10,25 @@ const prisma = new PrismaClient();
 const CONCURRENCY = Number(process.env.CONCURRENCY ?? 3);
 const DELAY_MS = Number(process.env.DELAY_MS ?? 1000);
 const LIMIT = Number(process.env.LIMIT ?? 0); // 0 = sem limite
+const REVALIDATE_URL =
+  process.env.REVALIDATE_URL ?? "http://127.0.0.1:3001/api/admin/revalidate";
+const REVALIDATE_TOKEN = process.env.REVALIDATE_TOKEN ?? "";
+
+async function revalidate(slug: string): Promise<void> {
+  if (!REVALIDATE_TOKEN) return; // silenciosamente skipa se não configurado
+  try {
+    await fetch(REVALIDATE_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${REVALIDATE_TOKEN}`,
+      },
+      body: JSON.stringify({ typeKey: "tool", slug }),
+    });
+  } catch {
+    /* não falha o seed por causa de revalidação */
+  }
+}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -57,7 +76,7 @@ async function main() {
   // schema, então só pode estar vazio.
   const allPending = await prisma.tool.findMany({
     where: { description: "" },
-    select: { id: true, name: true },
+    select: { id: true, name: true, slug: true },
     orderBy: { id: "asc" },
   });
   const pending = LIMIT > 0 ? allPending.slice(0, LIMIT) : allPending;
@@ -90,6 +109,7 @@ async function main() {
           metaDescription: data.metaDescription ?? null,
         },
       });
+      await revalidate(tool.slug);
       okCount++;
       console.log(`${tag} ${tool.name} — OK`);
     } catch (e) {
